@@ -1,48 +1,92 @@
 """
-Database Schemas
+Database Schemas for Notary Management App
 
-Define your MongoDB collection schemas here using Pydantic models.
-These schemas are used for data validation in your application.
-
-Each Pydantic model represents a collection in your database.
-Model name is converted to lowercase for the collection name:
-- User -> "user" collection
-- Product -> "product" collection
-- BlogPost -> "blogs" collection
+Each Pydantic model represents a collection in MongoDB. The collection name is the
+lowercase of the class name (e.g., Client -> "client").
 """
 
-from pydantic import BaseModel, Field
-from typing import Optional
+from pydantic import BaseModel, Field, EmailStr
+from typing import Optional, List, Literal
+from datetime import datetime
 
-# Example schemas (replace with your own):
 
-class User(BaseModel):
-    """
-    Users collection schema
-    Collection name: "user" (lowercase of class name)
-    """
-    name: str = Field(..., description="Full name")
-    email: str = Field(..., description="Email address")
-    address: str = Field(..., description="Address")
-    age: Optional[int] = Field(None, ge=0, le=120, description="Age in years")
-    is_active: bool = Field(True, description="Whether user is active")
+# Core domain models
+class Client(BaseModel):
+    first_name: str = Field(..., description="Client first name")
+    last_name: str = Field(..., description="Client last name")
+    email: EmailStr = Field(..., description="Primary email")
+    phone: Optional[str] = Field(None, description="Phone number")
+    address: Optional[str] = Field(None, description="Street address")
+    city: Optional[str] = Field(None)
+    country: Optional[str] = Field(None)
+    notes: Optional[str] = Field(None, description="Internal notes")
 
-class Product(BaseModel):
-    """
-    Products collection schema
-    Collection name: "product" (lowercase of class name)
-    """
-    title: str = Field(..., description="Product title")
-    description: Optional[str] = Field(None, description="Product description")
-    price: float = Field(..., ge=0, description="Price in dollars")
-    category: str = Field(..., description="Product category")
-    in_stock: bool = Field(True, description="Whether product is in stock")
 
-# Add your own schemas here:
-# --------------------------------------------------
+CaseStatus = Literal[
+    "New",
+    "Draft",
+    "Waiting Signature",
+    "Completed",
+    "Archived",
+]
 
-# Note: The Flames database viewer will automatically:
-# 1. Read these schemas from GET /schema endpoint
-# 2. Use them for document validation when creating/editing
-# 3. Handle all database operations (CRUD) directly
-# 4. You don't need to create any database endpoints!
+
+class Case(BaseModel):
+    client_id: str = Field(..., description="Reference to Client _id as string")
+    title: str = Field(..., description="Case title e.g. Power of Attorney for John Doe")
+    type: str = Field(..., description="Case type e.g. Power of Attorney, Affidavit")
+    status: CaseStatus = Field("New")
+    description: Optional[str] = None
+    assigned_to: Optional[str] = Field(None, description="User id or name of notary/assistant")
+    due_date: Optional[datetime] = None
+
+
+class Appointment(BaseModel):
+    client_id: Optional[str] = Field(None, description="Reference to Client _id as string if known")
+    service: str = Field(..., description="Service type selected during booking")
+    start_time: datetime = Field(...)
+    end_time: datetime = Field(...)
+    location: Optional[str] = Field(None)
+    notes: Optional[str] = Field(None)
+    status: Literal["Scheduled", "Completed", "Cancelled"] = Field("Scheduled")
+    case_id: Optional[str] = Field(None, description="Related case id if any")
+
+
+class Document(BaseModel):
+    case_id: str = Field(...)
+    name: str = Field(..., description="Document name")
+    template_key: Optional[str] = Field(None, description="Reference to a template type")
+    content: Optional[str] = Field(None, description="Rendered document text")
+    file_url: Optional[str] = Field(None, description="Stored file URL if uploaded")
+    ocr_text: Optional[str] = Field(None, description="OCR extracted text if available")
+    tags: Optional[List[str]] = Field(default_factory=list)
+
+
+class MessageTemplate(BaseModel):
+    key: str = Field(..., description="Template identifier")
+    channel: Literal["email", "sms"]
+    subject: Optional[str] = None
+    body: str = Field(...)
+
+
+class Payment(BaseModel):
+    client_id: Optional[str] = None
+    case_id: Optional[str] = None
+    service: str = Field(...)
+    amount_cents: int = Field(..., ge=50)
+    currency: str = Field("usd")
+    status: Literal["pending", "paid", "failed"] = Field("pending")
+    stripe_session_id: Optional[str] = None
+
+
+class AuditLog(BaseModel):
+    actor_role: Literal["notary", "assistant", "client", "system"]
+    actor_id: Optional[str] = None
+    action: str = Field(..., description="What happened e.g. created_case, updated_status")
+    entity: str = Field(..., description="client/case/document/appointment/payment")
+    entity_id: Optional[str] = None
+    details: Optional[dict] = None
+"""
+# The Flames database viewer can read these via GET /schema endpoint.
+# Collections will be created based on these models.
+"""

@@ -69,7 +69,7 @@ def get_schema():
 
 def oid(id_str: str):
     try:
-        from bson.objectid import ObjectId  # provided by PyMongo
+        from bson.objectid import ObjectId  # use PyMongo's bundled bson
         return ObjectId(id_str)
     except Exception:
         raise HTTPException(status_code=400, detail="Invalid id or bson not available")
@@ -287,7 +287,7 @@ def create_checkout_session(req: CheckoutRequest):
 @app.get("/dashboard")
 def dashboard(role: str = Depends(require_role(["notary", "assistant"]))):
     today = datetime.utcnow().strftime("%Y-%m-%d")
-    # Inline count for today; avoids nested call overhead
+    # call list_appointments directly for today; avoid recursion issues by inline query
     d = datetime.strptime(today, "%Y-%m-%d")
     start = datetime(d.year, d.month, d.day)
     end = start + timedelta(days=1)
